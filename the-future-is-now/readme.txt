@@ -3,7 +3,7 @@ Contributors: shacker, rboren, nacin, xjlin0
 Tags: events, posts, time, future
 Requires at least: 3.5
 Tested up to: 6.9.1
-Stable tag: 3.3.6
+Stable tag: 3.3.7
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -33,6 +33,9 @@ Q: What should be done after updating to v3.0 or later?
 A: Please re-activate the plugin, and set the post type in the Settings -> Future is Now.
 
 == Changelog ==
+
+= 3.3.7 =
+* add support for Lissa's Newsletter plugin (legacy themes) to show future posts.
 
 = 3.3.6 =
 * Enable toggling of future posts display under /category/category-name by settings. Also adding a workaround for Lissa's Newsletter plugin to show future posts in its latest posts block by changing filters in its newsletter_emails_composer admin page.

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: The Future is Now!
  * Description: Sets future timestamped posts to "publish" rather than "future" upon publish (useful for Events listing sites).
- * Version: 3.3.6
+ * Version: 3.3.7
  * Author: Ryan Boren and Andrew Nacin, maintained by Scot Hacker, updated by Jack Lin.
  * Plugin URI: https://wordpress.org/plugins/the-future-is-now/
  * Author URI: https://blog.birdhouse.org/
@@ -10,7 +10,7 @@
  * Tags: publish, future, post
  * Requires at least: 5.6
  * Tested up to: 6.9.1
- * Stable tag: 3.3.6
+ * Stable tag: 3.3.7
  * License: GPLv2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
 **/
@@ -30,6 +30,42 @@ function futurenow_load_settings() {
     );
 }
 add_action('init', 'futurenow_load_settings', 1);
+
+/**
+ * Newsletter Legacy Theme Compatibility - Frontend Preview
+ * Intercept Newsletter preview requests (?na=emails-preview) 
+ * This runs on frontend when the iframe loads theme.php
+ */
+add_action('init', function() {
+    global $fn_settings;
+    
+    // Check if this is a Newsletter preview request
+    if (isset($_GET['na']) && $_GET['na'] === 'emails-preview') {
+        if (!$fn_settings) {
+            futurenow_load_settings();
+        }
+        
+        if ($fn_settings && $fn_settings['admin_p'] === '1') {
+            // Register pre_get_posts filter for this request
+            add_filter('pre_get_posts', function($query) {
+                global $fn_settings;
+                
+                if ($query->is_main_query()) {
+                    return;
+                }
+                
+                $post_type = $query->get('post_type');
+                if (empty($post_type)) {
+                    $post_type = 'post';
+                }
+                
+                if (in_array($post_type, $fn_settings['types'])) {
+                    $query->set('post_status', array('publish', 'future'));
+                }
+            }, 1);
+        }
+    }
+}, 0);
 
 /**
  * Newsletter Plugin Compatibility - AJAX Hooks
@@ -62,26 +98,60 @@ add_action('wp_ajax_tnpc_render', function() {
     }, 1);
 }, 0);
 
+/**
+ * Newsletter Legacy Theme Compatibility - Admin Pages
+ * Hook into admin_init for newsletter edit pages (fallback mechanism)
+ */
+add_action('admin_init', function() {
+    global $fn_settings;
+    
+    $page = $_GET['page'] ?? '';
+    $is_newsletter_page = in_array($page, [
+        'newsletter_emails_edit',
+        'newsletter_emails_new'
+    ]);
+    
+    if (!$is_newsletter_page) {
+        return;
+    }
+    
+    if (!$fn_settings || $fn_settings['admin_p'] !== '1') {
+        return;
+    }
+    
+    add_filter('pre_get_posts', function($query) {
+        global $fn_settings;
+        
+        if ($query->is_main_query()) {
+            return;
+        }
+        
+        $post_type = $query->get('post_type');
+        if (empty($post_type)) {
+            $post_type = 'post';
+        }
+        
+        if (in_array($post_type, $fn_settings['types'])) {
+            $query->set('post_status', array('publish', 'future'));
+        }
+    }, 1);
+}, 1);
+
 // Frontend: Modify main query for category/tag/archive pages
 add_action('pre_get_posts', function($query) {
     global $fn_settings;
     
-    // Only process main query on frontend
     if (!$query->is_main_query()) return;
     if (is_admin()) return;
     if (!$fn_settings) return;
     
-    // Check if this is a category/tag/archive query
     if ($query->is_category() || $query->is_tag() || $query->is_archive() || $query->is_home()) {
-        // Get post_type
         $post_type = $query->get('post_type');
         if (empty($post_type)) {
-            $post_type = 'post'; // category/archive default to post
+            $post_type = 'post';
         }
         
-        // Check if enabled
         if (in_array($post_type, $fn_settings['types'])) {
-            // Modify post_status to include future
             $query->set('post_status', array('publish', 'future'));
         }
     }
@@ -94,14 +164,12 @@ add_filter('get_post_status', function($status, $post) {
     if (!$fn_settings) return $status;
     if (is_admin() && $fn_settings['admin_p'] !== '1') return $status;
     
-    // Ensure $post is an object
     if (is_numeric($post)) {
         $post = get_post($post);
     }
     
     if (!$post) return $status;
     
-    // If future and enabled post type, return publish
     if ($status === 'future' && in_array($post->post_type, $fn_settings['types'])) {
         return 'publish';
     }
@@ -109,15 +177,13 @@ add_filter('get_post_status', function($status, $post) {
     return $status;
 }, 1, 2);
 
-// Core Filter 2: Modify posts after SQL query (earliest stage after SQL execution)
+// Core Filter 2: Modify posts after SQL query
 add_filter('posts_results', function($posts, $query) {
     global $fn_settings;
     if (!$fn_settings || empty($posts)) return $posts;
     
-    // Admin check
     if (is_admin() && $fn_settings['admin_p'] !== '1') return $posts;
     
-    // Modify all matching posts
     foreach ($posts as $post) {
         if ($post->post_status === 'future') {
             if (in_array($post->post_type, $fn_settings['types'])) {
@@ -129,7 +195,7 @@ add_filter('posts_results', function($posts, $query) {
     return $posts;
 }, 1, 2);
 
-// Core Filter 3: the_posts filter (second layer of defense)
+// Core Filter 3: the_posts filter
 add_filter('the_posts', function($posts, $query) {
     global $fn_settings;
     if (!$fn_settings || empty($posts)) return $posts;
@@ -163,9 +229,8 @@ add_filter('posts_where', function($where, $query) {
     $post_type = $query->get('post_type');
     
     // BUG FIX: Handle case where WordPress returns all post types array
-    // If it's an array with many elements, it's likely not a real query parameter
     if (is_array($post_type) && count($post_type) > 5) {
-        $post_type = '';  // Reset, force extraction from SQL
+        $post_type = '';
     }
     
     // If not explicitly specified, check WHERE clause for post_type
@@ -178,20 +243,8 @@ add_filter('posts_where', function($where, $query) {
         } elseif (preg_match("/{$wpdb->posts}\.post_type\s+IN\s*\('([^']+)'\)/", $where, $matches)) {
             $post_type = $matches[1];
         } else {
-            // KEY FIX: Only assume 'post' for main query category/tag/archive/singular
-            if ($query->is_main_query() && (
-                $query->is_category() || 
-                $query->is_tag() || 
-                $query->is_tax() || 
-                $query->is_archive() ||
-                $query->is_home() ||
-                $query->is_singular()  // Also assume post for singular
-            )) {
-                $post_type = 'post';
-            } else {
-                // Cannot determine post_type, don't process this query
-                return $where;
-            }
+            // Default to 'post' for get_posts() queries (Newsletter legacy themes)
+            $post_type = 'post';
         }
     }
     
@@ -211,32 +264,29 @@ add_filter('posts_where', function($where, $query) {
     }
     
     // Core fix: Replace all forms of post_status restrictions
-    // 1. Standard form: post_status = 'publish'
     $where = str_replace(
         "{$wpdb->posts}.post_status = 'publish'", 
         "{$wpdb->posts}.post_status IN ('publish', 'future')", 
         $where
     );
     
-    // 2. Without table prefix
     $where = preg_replace(
         "/post_status\s*=\s*'publish'(?!\s*OR)/", 
         "post_status IN ('publish', 'future')", 
         $where
     );
     
-    // 3. IN clause form: post_status IN ('publish')
     $where = preg_replace(
         "/post_status\s+IN\s*\(\s*'publish'\s*\)/i", 
         "post_status IN ('publish', 'future')", 
         $where
     );
     
-    // 4. Remove Tribe Events date restrictions
+    // Remove Tribe Events date restrictions
     $where = preg_replace('/AND\s+\(\s*mt\d*\.meta_key\s*=\s*[\'"]_EventStartDateUTC[\'"]\s+AND\s+CAST\(mt\d*\.meta_value AS DATETIME\)\s*>=\s*[\'"][^"\']+[\'"]\s*\)/', '', $where);
     $where = preg_replace('/AND\s+wp_tec_occurrences\.start_date_utc\s*>=\s*[\'"][^"\']+[\'"]/', '', $where);
     
-    // 5. Special handling for singular post queries
+    // Special handling for singular post queries
     if ($query->is_singular() && $query->is_main_query()) {
         $where = preg_replace(
             "/post_status\s*=\s*'publish'/", 
@@ -283,7 +333,6 @@ add_action('admin_menu', function() {
 });
 
 function futurenow_options_page() {
-    // CSRF protection
     if (isset($_POST['fn_save'])) {
         check_admin_referer('futurenow_settings', 'futurenow_nonce');
         
@@ -291,7 +340,6 @@ function futurenow_options_page() {
         update_option('futurenow_show_future_in_archives', isset($_POST['arch_p']) ? '1' : '0');
         update_option('futurenow_show_future_in_calendar', isset($_POST['cal_p']) ? '1' : '0');
         
-        // Validate post_types input
         $submitted_types = $_POST['post_types'] ?? array('post');
         $valid_types = array_keys(get_post_types(array('public'=>true), 'names'));
         $sanitized_types = array_intersect($submitted_types, $valid_types);
@@ -315,59 +363,42 @@ function futurenow_options_page() {
             <input type="hidden" name="fn_save" value="1">
             <table class="form-table">
                 <tr>
-                    <th scope="row">
-                        Admin Display
-                    </th>
+                    <th scope="row">Admin Display</th>
                     <td>
                         <label>
                             <input type="checkbox" name="admin_p" value="1" <?php checked('1', $fn_settings['admin_p']); ?>>
-                                Show future posts as "Published" in Admin page
+                            Show future posts as "Published" in Admin page
                         </label>
                         <p class="description">
-                            When enabled, future-dated posts will appear as published in both frontend AND admin pages in both Published and Scheduled tabs. When disabled, future posts will ONLY appear as published on the frontend (visitors see them as published, but admin still sees "Scheduled"). <strong>Required for Newsletter plugin compatibility.</strong>
+                            When enabled, future-dated posts will appear as published in both frontend AND admin pages. <strong>Required for Newsletter plugin compatibility.</strong>
                         </p>
                     </td>
                 </tr>
                 <tr>
-                    <th scope="row">
-                        Archives Widget
-                    </th>
+                    <th scope="row">Archives Widget</th>
                     <td>
                         <label>
                             <input type="checkbox" name="arch_p" value="1" <?php checked('1', $fn_settings['arch_p']); ?>>
-                                Display future months in Archives widget
+                            Display future months in Archives widget
                         </label>
-                        <p class="description">
-                            When enabled, the Archives widget will show future months (e.g., December 2099) if there are future-dated posts. When disabled, only past and current months will appear in Archives widget.
-                        </p>
                     </td>
                 </tr>
                 <tr>
-                    <th scope="row">
-                        Calendar Widget
-                    </th>
+                    <th scope="row">Calendar Widget</th>
                     <td>
                         <label>
                             <input type="checkbox" name="cal_p" value="1" <?php checked('1', $fn_settings['cal_p']); ?>>
-                                Show post links in calendar widget
+                            Show post links in calendar widget
                         </label>
-                        <p class="description">
-                            When enabled, the Calendar widget will show clickable links for future dates and display next month navigation if there are future posts. When disabled, only past and current dates will be clickable.
-                        </p> 
                     </td>
                 </tr>
                 <tr>
-                    <th scope="row">
-                        Post Types
-                    </th>
+                    <th scope="row">Post Types</th>
                     <td>
                         <?php foreach (get_post_types(array('public'=>true), 'objects') as $t) {
                             $c = in_array($t->name, $fn_settings['types']) ? 'checked' : '';
                             echo "<label style='display:block'><input type='checkbox' name='post_types[]' value='{$t->name}' $c> {$t->label} <code>({$t->name})</code></label>";
-                        } ?>
-                        <p class="description">
-                            Future-dated posts of selected types will appear as published on frontend (including in shortcodes and third-party widgets). If <em>Show future posts as "Published" in Admin page</em> is enabled above, they will also appear as published in admin.
-                        </p> 
+        } ?>
                     </td>
                 </tr>
             </table>
