@@ -3,7 +3,7 @@ Contributors: shacker, rboren, nacin, xjlin0
 Tags: events, posts, time, future
 Requires at least: 3.5
 Tested up to: 6.9.1
-Stable tag: 3.3.7
+Stable tag: 3.3.8
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -34,8 +34,11 @@ A: Please re-activate the plugin, and set the post type in the Settings -> Futur
 
 == Changelog ==
 
+= 3.3.8 =
+* add support for Lissa's Newsletter plugin (legacy with email-create) to include future posts.
+
 = 3.3.7 =
-* add support for Lissa's Newsletter plugin (legacy themes) to show future posts.
+* add support for Lissa's Newsletter plugin (legacy themes preview) to show future posts.
 
 = 3.3.6 =
 * Enable toggling of future posts display under /category/category-name by settings. Also adding a workaround for Lissa's Newsletter plugin to show future posts in its latest posts block by changing filters in its newsletter_emails_composer admin page.

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: The Future is Now!
  * Description: Sets future timestamped posts to "publish" rather than "future" upon publish (useful for Events listing sites).
- * Version: 3.3.7
+ * Version: 3.3.8
  * Author: Ryan Boren and Andrew Nacin, maintained by Scot Hacker, updated by Jack Lin.
  * Plugin URI: https://wordpress.org/plugins/the-future-is-now/
  * Author URI: https://blog.birdhouse.org/
@@ -10,7 +10,7 @@
  * Tags: publish, future, post
  * Requires at least: 5.6
  * Tested up to: 6.9.1
- * Stable tag: 3.3.7
+ * Stable tag: 3.3.8
  * License: GPLv2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
 **/
@@ -32,21 +32,24 @@ function futurenow_load_settings() {
 add_action('init', 'futurenow_load_settings', 1);
 
 /**
- * Newsletter Legacy Theme Compatibility - Frontend Preview
- * Intercept Newsletter preview requests (?na=emails-preview) 
- * This runs on frontend when the iframe loads theme.php
+ * Newsletter Legacy Theme Compatibility - Frontend Requests
+ * Handles both preview (?na=emails-preview) and creation (?na=emails-create)
+ * Newsletter executes theme.php in frontend context for proper excerpt/thumbnail extraction
  */
 add_action('init', function() {
     global $fn_settings;
     
-    // Check if this is a Newsletter preview request
-    if (isset($_GET['na']) && $_GET['na'] === 'emails-preview') {
+    // Check if this is a Newsletter frontend request
+    $na = $_GET['na'] ?? '';
+    $is_newsletter_request = in_array($na, ['emails-preview', 'emails-create']);
+    
+    if ($is_newsletter_request) {
         if (!$fn_settings) {
             futurenow_load_settings();
         }
         
         if ($fn_settings && $fn_settings['admin_p'] === '1') {
-            // Register pre_get_posts filter for this request
+            // Register pre_get_posts filter for Newsletter theme.php execution
             add_filter('pre_get_posts', function($query) {
                 global $fn_settings;
                 
@@ -398,7 +401,7 @@ function futurenow_options_page() {
                         <?php foreach (get_post_types(array('public'=>true), 'objects') as $t) {
                             $c = in_array($t->name, $fn_settings['types']) ? 'checked' : '';
                             echo "<label style='display:block'><input type='checkbox' name='post_types[]' value='{$t->name}' $c> {$t->label} <code>({$t->name})</code></label>";
-        } ?>
+                        } ?>
                     </td>
                 </tr>
             </table>
@@ -408,20 +411,21 @@ function futurenow_options_page() {
         <hr>
         
         <h2>Newsletter Plugin Compatibility</h2>
-        <p>
-            When using Lissa's <strong>The Newsletter plugin</strong>, future posts can appear in the composer's 
-            "Posts" blocks. However, the first time you open a newsletter after enabling this plugin, 
-            you need to <strong>refresh the Posts block</strong>:
-        </p>
-        <ol>
-            <li>Click the Posts block settings (Edit icon)</li>
-            <li>Change any setting (e.g., change "Max" from 4 to 5, then back to 4)</li>
-            <li>Future posts will now appear</li>
-        </ol>
-        <p>
-            <strong>Best Practice:</strong> Always preview newsletters before sending to ensure 
-            the latest posts are included.
-        </p>
+        
+        <h3>Complete Support - All Workflows</h3>
+        <p><strong>Version 3.3.8</strong> fully supports Newsletter plugin:</p>
+        <ul>
+            <li>✅ <strong>Legacy Themes</strong> - Preview (iframe) and "Proceed to edit" work correctly</li>
+            <li>✅ <strong>Modern Composer</strong> - Posts blocks show future posts with automatic updates</li>
+        </ul>
+        
+        <p><strong>Requirements:</strong></p>
+        <ul>
+            <li>✅ "Show future posts as 'Published' in Admin page" must be enabled (above)</li>
+            <li>✅ The post type must be selected in "Post Types" (above)</li>
+        </ul>
+        
+        <p><strong>Best Practice:</strong> Always preview newsletters before sending to ensure the latest posts are included.</p>
     </div>
     <?php
 }
